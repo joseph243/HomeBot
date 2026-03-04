@@ -1,11 +1,5 @@
-import cv2, time, numpy, smtplib, os, requests, threading
-from datetime import datetime, timedelta
-from email.mime.multipart import MIMEMultipart
-from email.mime.image import MIMEImage
-from email.mime.text import MIMEText
-
-camera = cv2.VideoCapture(0)
-cameraName = "DefaultCamera000"
+import time, os, requests, threading
+from datetime import datetime
 
 #email api secrets:
 secrets_local_file = "~/.ssh/telegram.key"
@@ -134,6 +128,7 @@ def main():
 	while(True):
 		if (telegram_command == None):
 			time.sleep(1)
+			continue
 		if (telegram_command == "help"):
 			message = "Help is on the way!  I know these commands:  status | stop | hello | time | help"
 			send_telegram_message(message)
@@ -150,7 +145,7 @@ def main():
 			message = "Sure, let me just terminate myself real quick.  I don't mind.  Really.  There's no coming back from this..."
 			send_telegram_message(message)
 			telegram_command = None
-			break;
+			break
 		if telegram_command == "hello":
 			message = "Hello!  I am homebot.  Your friendly home automation conductor.  I don't know much yet but I am learning!"
 			send_telegram_message(message)
