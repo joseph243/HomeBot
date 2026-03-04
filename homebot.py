@@ -117,7 +117,7 @@ def main():
 	token = secrets["homebottelegramtoken"]
 
 	print("")
-	print("monitoring started at " + startTime.strftime("%Y-%m-%d %H:%M:%S"))
+	print("started at " + startTime.strftime("%Y-%m-%d %H:%M:%S"))
 	print("-----------------------------------------")
 	print("logLevel is           " + str(logLevel))
 	print("-----------------------------------------")
@@ -132,17 +132,18 @@ def main():
 	t.start()
 
 	while(True):
-		current_time = datetime.now()
+		if (telegram_command == None):
+			time.sleep(1)
 		if (telegram_command == "help"):
 			message = "Help is on the way!  I know these commands:  status | stop | hello | time | help"
 			send_telegram_message(message)
 			telegram_command = None
 		if (telegram_command == "time"):
-			message = "The current time is " + current_time.strftime("%I:%M") + ". Brain the size of a planet, and they treat me like a sundial."
+			message = "The current time is " + datetime.now().strftime("%I:%M") + ". Brain the size of a planet, and they treat me like a sundial."
 			send_telegram_message(message)
-			telegram_command = None			
+			telegram_command = None	
 		if telegram_command == "status":
-			message = "Hello! I am active but I don't have much going on at the moment. I'm feeling very " + configTest + " today."
+			message = "Hello! I am active but I don't have much going on at the moment. I'm feeling very " + configTest + " today.  I have been running since " + startTime.strftime("%Y-%m-%d %H:%M:%S")
 			send_telegram_message(message)
 			telegram_command = None
 		if telegram_command == "stop":
