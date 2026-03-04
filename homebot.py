@@ -1,9 +1,28 @@
-import time, os, requests, threading
+import time, os, requests, threading, queue
 from datetime import datetime
+from multiprocessing.managers import BaseManager
 
-#email api secrets:
+#api secrets:
 secrets_local_file = "~/.ssh/telegram.key"
 config_local_file = "homebot.config"
+feedback_queue = queue.Queue()
+
+class HomebotManager(BaseManager):
+	pass
+
+HomebotManager.register('get_feedback_queue', callable=lambda: feedback_queue)
+
+def start_manager(key):
+	HOST = '0.0.0.0'
+	PORT = 55555
+	manager = HomebotManager(address=(HOST,PORT), authkey=key)
+	server = manager.get_server()
+	thread = threading.Thread(target = server.serve_forever, daemon=True)
+	thread.start()
+	log(f"Homebot is listening for messages on {HOST}:{PORT}")
+
+def handle_device_message(in_dict):
+	send_telegram_message(in_dict["name"] + " " + in_dict["type"] + " has just come online! ")
 
 def read_secrets(inPath):
 	print("reading secrets from " + inPath)
@@ -16,6 +35,7 @@ def read_secrets(inPath):
 				output[key.strip()] = value.strip()
 	assert "homebottelegramtoken" in output, "secrets file at " + secrets_local_file + " must contain homebottelegramtoken."
 	assert "homebottelegramchatid" in output, "secrets file at " + secrets_local_file + " must contain homebottelegramchatid."
+	assert "homebotqueuetoken" in output, "secrets file at " + secrets_local_file + " must contain homebotqueuetoken."
 	return output
 
 def read_config_file(inPath):
@@ -109,6 +129,7 @@ def main():
 	global token
 	chatId = secrets["homebottelegramchatid"]
 	token = secrets["homebottelegramtoken"]
+	AUTH = (secrets["homebotqueuetoken"])
 
 	print("")
 	print("started at " + startTime.strftime("%Y-%m-%d %H:%M:%S"))
@@ -118,6 +139,8 @@ def main():
 	print("")
 	print("starting Telegram Watcher thread.")
 
+	start_manager(AUTH.encode('utf-8'))
+
 	t = threading.Thread(
 		target=messageWatcher,
 		daemon=True,
@@ -126,13 +149,16 @@ def main():
 	t.start()
 
 	while(True):
+		##monitor device comms
+		try:
+			dev_msg_dict = feedback_queue.get_nowait()
+			handle_device_message(dev_msg_dict)
+		except queue.Empty:
+			pass
+		##monitor user comms
 		if (telegram_command == None):
 			time.sleep(1)
 			continue
-		if (telegram_command == "help"):
-			message = "Help is on the way!  I know these commands:  status | stop | hello | time | help"
-			send_telegram_message(message)
-			telegram_command = None
 		if (telegram_command == "time"):
 			message = "The current time is " + datetime.now().strftime("%I:%M") + ". Brain the size of a planet, and they treat me like a sundial."
 			send_telegram_message(message)
@@ -141,17 +167,21 @@ def main():
 			message = "Hello! I am active but I don't have much going on at the moment. I'm feeling very " + configTest + " today.  I have been running since " + startTime.strftime("%Y-%m-%d %H:%M:%S")
 			send_telegram_message(message)
 			telegram_command = None
-		if telegram_command == "stop":
-			message = "Sure, let me just terminate myself real quick.  I don't mind.  Really.  There's no coming back from this..."
+		if telegram_command == "die":
+			message = "Sure, let me just terminate myself real quick.  I don't mind.  Really.  It probably won't hurt..."
 			send_telegram_message(message)
 			telegram_command = None
 			break
 		if telegram_command == "hello":
-			message = "Hello!  I am homebot.  Your friendly home automation conductor.  I don't know much yet but I am learning!"
+			message = "Hello!  I am homebot, your friendly home automation conductor.  I don't know much yet but I am learning!"
 			send_telegram_message(message)
 			telegram_command = None
 		if telegram_command != None:
-			message = "I do not understand you, sorry!  Type 'help' to learn my language baby."
+			message = "I do not understand you, sorry!  You seem like you need help."
+			send_telegram_message(message)
+			telegram_command = "help"
+		if (telegram_command == "help"):
+			message = "Help is on the way!  I know these commands:  status | die | hello | time | help"
 			send_telegram_message(message)
 			telegram_command = None
 
