@@ -1,11 +1,25 @@
 import time, os, requests, threading, queue
 from datetime import datetime
 from multiprocessing.managers import BaseManager
+from enum import Enum, auto
+from dataclasses import dataclass
 
 #api secrets:
 secrets_local_file = "~/.ssh/telegram.key"
 config_local_file = "homebot.config"
 feedback_queue = queue.Queue()
+
+class DeviceType(str, Enum):
+    CAMERA = "CAMERA"
+
+@dataclass
+class Device:
+    name: str
+    device_type: DeviceType
+    online: bool
+    def __str__(self) -> str:
+        status = "ONLINE" if self.online else "OFFLINE"
+        return f"{self.name} | {self.device_type.value} | {status}"
 
 class HomebotManager(BaseManager):
 	pass
@@ -22,7 +36,22 @@ def start_manager(key):
 	log(f"Homebot is listening for messages on {HOST}:{PORT}")
 
 def handle_device_message(in_dict):
-	send_telegram_message(in_dict["name"] + " " + in_dict["type"] + " has just come online! ")
+	t = in_dict["type"]
+	n = in_dict["name"]
+	o = True
+    try:
+        device_type = DeviceType(t.upper())
+    except ValueError:
+        raise ValueError(f"Invalid device type: {t}")
+	d = Device(n, device_type, o)
+    track_device(d)
+	send_telegram_message("received message from device: " + str(d))
+
+def track_device(inDevice):
+	if any(d.name == inDevice.name for d in devices):
+		raise ValueError(f"Device '{inDevice.name}' already exists")
+	else:
+		devices.append(inDevice)
 
 def read_secrets(inPath):
 	print("reading secrets from " + inPath)
@@ -116,17 +145,28 @@ def messageWatcher(token, authorizedUser):
 			log(">>telegram polling error" + str(e))
 			time.sleep(5)
 
-def main():
-	configs = read_config_file(config_local_file)
+def generateStatusMessage() -> str:
+	botStatus = "I have been running since " + startTime.strftime("%Y-%m-%d %H:%M:%S")
+	if not devices:
+		return "HomeBot is running, but tracking zero devices. " + botStatus
+	else:
+		body = "\n".join(str(d) for d in devices)
+		return botStatus + "\n" + "I am tracking these devices: " + "\n" + body
+	
+def main():	
 	global logLevel
 	global telegram_command
+	global startTime
+	global chatId
+	global token
+
+	configs = read_config_file(config_local_file)
 	logLevel = int(configs["logLevel"])
 	configTest = configs["test"]
 	startTime = datetime.now()
 
 	secrets = read_secrets(secrets_local_file)
-	global chatId
-	global token
+
 	chatId = secrets["homebottelegramchatid"]
 	token = secrets["homebottelegramtoken"]
 	AUTH = (secrets["homebotqueuetoken"])
@@ -148,14 +188,16 @@ def main():
 	)
 	t.start()
 
+	devices: list[Device] = []
+
 	while(True):
-		##monitor device comms
+		##monitor device comms:
 		try:
 			dev_msg_dict = feedback_queue.get_nowait()
 			handle_device_message(dev_msg_dict)
 		except queue.Empty:
 			pass
-		##monitor user comms
+		##monitor telegram/user comms:
 		if (telegram_command == None):
 			time.sleep(1)
 			continue
@@ -164,7 +206,7 @@ def main():
 			send_telegram_message(message)
 			telegram_command = None	
 		if telegram_command == "status":
-			message = "Hello! I am active but I don't have much going on at the moment. I'm feeling very " + configTest + " today.  I have been running since " + startTime.strftime("%Y-%m-%d %H:%M:%S")
+			message = generateStatusMessage() 
 			send_telegram_message(message)
 			telegram_command = None
 		if telegram_command == "die":
@@ -185,7 +227,9 @@ def main():
 			send_telegram_message(message)
 			telegram_command = None
 
-	log("shutting down.")
+	exitMessage = "shutting down."
+	send_telegram_message(exitMessage)
+	log(exitMessage)
 
 if __name__ == "__main__":
 	main()
