@@ -1,30 +1,18 @@
 import time, os, requests, threading, queue
 from datetime import datetime
 from multiprocessing.managers import BaseManager
-from enum import Enum, auto
-from dataclasses import dataclass
+from device import Device, DeviceType
 
 #api secrets:
 secrets_local_file = "~/.ssh/telegram.key"
 config_local_file = "homebot.config"
 feedback_queue = queue.Queue()
 
-class DeviceType(str, Enum):
-    CAMERA = "CAMERA"
-
-@dataclass
-class Device:
-    name: str
-    device_type: DeviceType
-    online: bool
-    def __str__(self) -> str:
-        status = "ONLINE" if self.online else "OFFLINE"
-        return f"{self.name} | {self.device_type.value} | {status}"
-
 class HomebotManager(BaseManager):
 	pass
 
 HomebotManager.register('get_feedback_queue', callable=lambda: feedback_queue)
+devices: list[Device] = []
 
 def start_manager(key):
 	HOST = '0.0.0.0'
@@ -39,19 +27,19 @@ def handle_device_message(in_dict):
 	t = in_dict["type"]
 	n = in_dict["name"]
 	o = True
-    try:
-        device_type = DeviceType(t.upper())
-    except ValueError:
-        raise ValueError(f"Invalid device type: {t}")
+	try:
+		device_type = DeviceType(t.upper())
+	except ValueError:
+		raise ValueError(f"Invalid device type: {t}")
 	d = Device(n, device_type, o)
-    track_device(d)
+	track_device(d)
 	send_telegram_message("received message from device: " + str(d))
 
 def track_device(inDevice):
-	if any(d.name == inDevice.name for d in devices):
-		raise ValueError(f"Device '{inDevice.name}' already exists")
-	else:
-		devices.append(inDevice)
+	for d in devices:
+		if d.name == inDevice.name:
+			devices.remove(d)
+	devices.append(inDevice)
 
 def read_secrets(inPath):
 	print("reading secrets from " + inPath)
@@ -70,7 +58,8 @@ def read_secrets(inPath):
 def read_config_file(inPath):
 	print("reading configuration from " + inPath)
 	expectedFields = [
-    "test",
+    "deviceOfflineAfterMinutes",
+	"checkDeviceFrequencyMinutes"
 	]
 	inPath = os.path.expanduser(inPath)
 	configs = {}
@@ -152,17 +141,26 @@ def generateStatusMessage() -> str:
 	else:
 		body = "\n".join(str(d) for d in devices)
 		return botStatus + "\n" + "I am tracking these devices: " + "\n" + body
-	
+
+def updateDeviceStatuses():
+	now = time.time()
+	for d in devices:
+		if ((now - d.last_contact) > configOfflineAfterSeconds):
+			d.online = False
+
 def main():	
 	global logLevel
 	global telegram_command
 	global startTime
 	global chatId
 	global token
+	global devices
+	global configOfflineAfterSeconds
 
 	configs = read_config_file(config_local_file)
-	logLevel = int(configs["logLevel"])
-	configTest = configs["test"]
+	configOfflineAfterSeconds = int(configs["deviceOfflineAfterMinutes"]) * 60
+	configCheckEverySeconds = int(configs["checkDeviceFrequencyMinutes"]) * 60
+
 	startTime = datetime.now()
 
 	secrets = read_secrets(secrets_local_file)
@@ -174,10 +172,12 @@ def main():
 	print("")
 	print("started at " + startTime.strftime("%Y-%m-%d %H:%M:%S"))
 	print("-----------------------------------------")
-	print("logLevel is           " + str(logLevel))
+	print("check in on devices every " + configs["deviceOfflineAfterMinutes"] + " minutes.")
+	print("devices offline after " + configs["checkDeviceFrequencyMinutes"] + " minutes.")
 	print("-----------------------------------------")
 	print("")
 	print("starting Telegram Watcher thread.")
+	send_telegram_message("HomeBot activated!")
 
 	start_manager(AUTH.encode('utf-8'))
 
@@ -187,8 +187,6 @@ def main():
 		args=(read_secrets(secrets_local_file)["homebottelegramtoken"],read_secrets(secrets_local_file)["homebottelegramchatid"])
 	)
 	t.start()
-
-	devices: list[Device] = []
 
 	while(True):
 		##monitor device comms:
@@ -214,8 +212,8 @@ def main():
 			send_telegram_message(message)
 			telegram_command = None
 			break
-		if telegram_command == "hello":
-			message = "Hello!  I am homebot, your friendly home automation conductor.  I don't know much yet but I am learning!"
+		if telegram_command == "hello" or telegram_command == "hi":
+			message = "Hello!  I am homebot, your friendly home automation conductor."
 			send_telegram_message(message)
 			telegram_command = None
 		if telegram_command != None:
