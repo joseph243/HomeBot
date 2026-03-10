@@ -1,3 +1,4 @@
+from __future__ import annotations
 import time, os, requests, threading, queue
 from datetime import datetime
 from multiprocessing.managers import BaseManager
