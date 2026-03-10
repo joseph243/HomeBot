@@ -33,13 +33,17 @@ def handle_device_message(in_dict):
 		raise ValueError(f"Invalid device type: {t}")
 	d = Device(n, device_type, o)
 	track_device(d)
-	send_telegram_message("received message from device: " + str(d))
 
 def track_device(inDevice):
+	isNewDevice = True
 	for d in devices:
 		if d.name == inDevice.name:
+			#lazy way to update last contact time, just remove and re-add every cycle
 			devices.remove(d)
+			isNewDevice = False
 	devices.append(inDevice)
+	if isNewDevice:
+		send_telegram_message("New Device Detected: " + str(inDevice))
 
 def read_secrets(inPath):
 	print("reading secrets from " + inPath)
@@ -143,13 +147,15 @@ def generateStatusMessage() -> str:
 		return botStatus + "\n" + "I am tracking these devices: " + "\n" + body
 
 def updateDeviceStatuses():
-	now = time.time()
+	now = datetime.now()
 	for d in devices:
-		if ((now - d.last_contact) > configOfflineAfterSeconds):
-			d.online = False
+		seconds_since_contact = (now - d.last_contact).total_seconds()
+		newStatus = seconds_since_contact < configOfflineAfterSeconds
+		if (newStatus != d.online):
+			d.online = newStatus
+			send_telegram_message(str(d))
 
-def main():	
-	global logLevel
+def main():
 	global telegram_command
 	global startTime
 	global chatId
@@ -188,6 +194,8 @@ def main():
 	)
 	t.start()
 
+	next_device_check = time.time() + configCheckEverySeconds
+
 	while(True):
 		##monitor device comms:
 		try:
@@ -195,6 +203,14 @@ def main():
 			handle_device_message(dev_msg_dict)
 		except queue.Empty:
 			pass
+
+		##update device statuses:
+		now = time.time()
+		if (now >= next_device_check):
+			print("status check..")
+			updateDeviceStatuses()
+			next_device_check = now + configCheckEverySeconds
+
 		##monitor telegram/user comms:
 		if (telegram_command == None):
 			time.sleep(1)
@@ -213,7 +229,7 @@ def main():
 			telegram_command = None
 			break
 		if telegram_command == "hello" or telegram_command == "hi":
-			message = "Hello!  I am homebot, your friendly home automation conductor."
+			message = "Hello!  I am HomeBot, your friendly home automation conductor."
 			send_telegram_message(message)
 			telegram_command = None
 		if telegram_command != None:
@@ -221,7 +237,7 @@ def main():
 			send_telegram_message(message)
 			telegram_command = "help"
 		if (telegram_command == "help"):
-			message = "Help is on the way!  I know these commands:  status | die | hello | time | help"
+			message = "Help is on the way!  I know these commands:  status | die | hello | hi | time | help"
 			send_telegram_message(message)
 			telegram_command = None
 
