@@ -37,14 +37,18 @@ def handle_device_message(in_dict):
 
 def track_device(inDevice):
 	isNewDevice = True
+	isComingOnline = True
 	for d in devices:
+		#lazy way to update last contact time, just remove and re-add every cycle
 		if d.name == inDevice.name:
-			#lazy way to update last contact time, just remove and re-add every cycle
+			isComingOnline = not d.online
 			devices.remove(d)
 			isNewDevice = False
 	devices.append(inDevice)
 	if isNewDevice:
 		send_telegram_message("New Device Detected: " + str(inDevice))
+	if isComingOnline:
+		send_telegram_message(str(inDevice))
 
 def read_secrets(inPath):
 	print("reading secrets from " + inPath)
@@ -147,7 +151,7 @@ def generateStatusMessage() -> str:
 		body = "\n".join(str(d) for d in devices)
 		return botStatus + "\n" + "I am tracking these devices: " + "\n" + body
 
-def updateDeviceStatuses():
+def checkHeartbeat():
 	now = datetime.now()
 	for d in devices:
 		seconds_since_contact = (now - d.last_contact).total_seconds()
@@ -198,6 +202,7 @@ def main():
 	next_device_check = time.time() + configCheckEverySeconds
 
 	while(True):
+		time.sleep(1)
 		##monitor device comms:
 		try:
 			dev_msg_dict = feedback_queue.get_nowait()
@@ -209,12 +214,11 @@ def main():
 		now = time.time()
 		if (now >= next_device_check):
 			print("status check..")
-			updateDeviceStatuses()
+			checkHeartbeat()
 			next_device_check = now + configCheckEverySeconds
 
 		##monitor telegram/user comms:
 		if (telegram_command == None):
-			time.sleep(1)
 			continue
 		if (telegram_command == "time"):
 			message = "The current time is " + datetime.now().strftime("%I:%M") + ". Brain the size of a planet, and they treat me like a sundial."
