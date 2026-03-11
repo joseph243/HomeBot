@@ -47,7 +47,7 @@ def track_device(inDevice):
 	devices.append(inDevice)
 	if isNewDevice:
 		send_telegram_message("New Device Detected: " + str(inDevice))
-	if isComingOnline:
+	elif isComingOnline:
 		send_telegram_message(str(inDevice))
 
 def read_secrets(inPath):
