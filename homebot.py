@@ -242,7 +242,7 @@ def main():
 			send_telegram_message(message)
 			telegram_command = None
 		if telegram_command != None:
-			message = "I do not understand ythis command!  Type 'help' for a list of commands."
+			message = "I do not understand this command!  Type 'help' for a list of commands."
 			send_telegram_message(message)
 			telegram_command = None
 
