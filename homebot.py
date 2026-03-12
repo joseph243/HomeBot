@@ -237,12 +237,12 @@ def main():
 			message = "Hello!  I am HomeBot, your friendly home automation conductor."
 			send_telegram_message(message)
 			telegram_command = None
-		if telegram_command != None:
-			message = "I do not understand you, sorry!  You seem like you need help."
-			send_telegram_message(message)
-			telegram_command = "help"
 		if (telegram_command == "help"):
 			message = "Help is on the way!  I know these commands:  status | die | hello | hi | time | help"
+			send_telegram_message(message)
+			telegram_command = None
+		if telegram_command != None:
+			message = "I do not understand ythis command!  Type 'help' for a list of commands."
 			send_telegram_message(message)
 			telegram_command = None
 
