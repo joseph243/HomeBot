@@ -1,9 +1,54 @@
-import time, os, requests, threading
+from __future__ import annotations
+import time, os, requests, threading, queue
 from datetime import datetime
+from multiprocessing.managers import BaseManager
+from device import Device, DeviceType
 
-#email api secrets:
+#api secrets:
 secrets_local_file = "~/.ssh/telegram.key"
 config_local_file = "homebot.config"
+feedback_queue = queue.Queue()
+
+class HomebotManager(BaseManager):
+	pass
+
+HomebotManager.register('get_feedback_queue', callable=lambda: feedback_queue)
+devices: list[Device] = []
+
+def start_manager(key):
+	HOST = '0.0.0.0'
+	PORT = 55555
+	manager = HomebotManager(address=(HOST,PORT), authkey=key)
+	server = manager.get_server()
+	thread = threading.Thread(target = server.serve_forever, daemon=True)
+	thread.start()
+	log(f"Homebot is listening for messages on {HOST}:{PORT}")
+
+def handle_device_message(in_dict):
+	t = in_dict["type"]
+	n = in_dict["name"]
+	o = True
+	try:
+		device_type = DeviceType(t.upper())
+	except ValueError:
+		raise ValueError(f"Invalid device type: {t}")
+	d = Device(n, device_type, o)
+	track_device(d)
+
+def track_device(inDevice):
+	isNewDevice = True
+	isComingOnline = True
+	for d in devices:
+		#lazy way to update last contact time, just remove and re-add every cycle
+		if d.name == inDevice.name:
+			isComingOnline = not d.online
+			devices.remove(d)
+			isNewDevice = False
+	devices.append(inDevice)
+	if isNewDevice:
+		send_telegram_message("New Device Detected: " + str(inDevice))
+	elif isComingOnline:
+		send_telegram_message(str(inDevice))
 
 def read_secrets(inPath):
 	print("reading secrets from " + inPath)
@@ -16,12 +61,14 @@ def read_secrets(inPath):
 				output[key.strip()] = value.strip()
 	assert "homebottelegramtoken" in output, "secrets file at " + secrets_local_file + " must contain homebottelegramtoken."
 	assert "homebottelegramchatid" in output, "secrets file at " + secrets_local_file + " must contain homebottelegramchatid."
+	assert "homebotqueuetoken" in output, "secrets file at " + secrets_local_file + " must contain homebotqueuetoken."
 	return output
 
 def read_config_file(inPath):
 	print("reading configuration from " + inPath)
 	expectedFields = [
-    "test",
+    "deviceOfflineAfterMinutes",
+	"checkDeviceFrequencyMinutes"
 	]
 	inPath = os.path.expanduser(inPath)
 	configs = {}
@@ -96,27 +143,54 @@ def messageWatcher(token, authorizedUser):
 			log(">>telegram polling error" + str(e))
 			time.sleep(5)
 
+def generateStatusMessage() -> str:
+	botStatus = "I have been running since " + startTime.strftime("%Y-%m-%d %H:%M:%S")
+	if not devices:
+		return "HomeBot is running, but tracking zero devices. " + botStatus
+	else:
+		body = "\n".join(str(d) for d in devices)
+		return botStatus + "\n" + "I am tracking these devices: " + "\n" + body
+
+def checkHeartbeat():
+	now = datetime.now()
+	for d in devices:
+		seconds_since_contact = (now - d.last_contact).total_seconds()
+		newStatus = seconds_since_contact < configOfflineAfterSeconds
+		if (newStatus != d.online):
+			d.online = newStatus
+			send_telegram_message(str(d))
+
 def main():
-	configs = read_config_file(config_local_file)
-	global logLevel
 	global telegram_command
-	logLevel = int(configs["logLevel"])
-	configTest = configs["test"]
+	global startTime
+	global chatId
+	global token
+	global devices
+	global configOfflineAfterSeconds
+
+	configs = read_config_file(config_local_file)
+	configOfflineAfterSeconds = int(configs["deviceOfflineAfterMinutes"]) * 60
+	configCheckEverySeconds = int(configs["checkDeviceFrequencyMinutes"]) * 60
+
 	startTime = datetime.now()
 
 	secrets = read_secrets(secrets_local_file)
-	global chatId
-	global token
+
 	chatId = secrets["homebottelegramchatid"]
 	token = secrets["homebottelegramtoken"]
+	AUTH = (secrets["homebotqueuetoken"])
 
 	print("")
 	print("started at " + startTime.strftime("%Y-%m-%d %H:%M:%S"))
 	print("-----------------------------------------")
-	print("logLevel is           " + str(logLevel))
+	print("check in on devices every " + configs["deviceOfflineAfterMinutes"] + " minutes.")
+	print("devices offline after " + configs["checkDeviceFrequencyMinutes"] + " minutes.")
 	print("-----------------------------------------")
 	print("")
 	print("starting Telegram Watcher thread.")
+	send_telegram_message("HomeBot activated!")
+
+	start_manager(AUTH.encode('utf-8'))
 
 	t = threading.Thread(
 		target=messageWatcher,
@@ -125,37 +199,56 @@ def main():
 	)
 	t.start()
 
+	next_device_check = time.time() + configCheckEverySeconds
+
 	while(True):
+		time.sleep(1)
+		##monitor device comms:
+		try:
+			dev_msg_dict = feedback_queue.get_nowait()
+			handle_device_message(dev_msg_dict)
+		except queue.Empty:
+			pass
+
+		##update device statuses:
+		now = time.time()
+		if (now >= next_device_check):
+			print("status check..")
+			checkHeartbeat()
+			next_device_check = now + configCheckEverySeconds
+
+		##monitor telegram/user comms:
 		if (telegram_command == None):
-			time.sleep(1)
 			continue
-		if (telegram_command == "help"):
-			message = "Help is on the way!  I know these commands:  status | stop | hello | time | help"
-			send_telegram_message(message)
-			telegram_command = None
 		if (telegram_command == "time"):
 			message = "The current time is " + datetime.now().strftime("%I:%M") + ". Brain the size of a planet, and they treat me like a sundial."
 			send_telegram_message(message)
 			telegram_command = None	
 		if telegram_command == "status":
-			message = "Hello! I am active but I don't have much going on at the moment. I'm feeling very " + configTest + " today.  I have been running since " + startTime.strftime("%Y-%m-%d %H:%M:%S")
+			message = generateStatusMessage() 
 			send_telegram_message(message)
 			telegram_command = None
-		if telegram_command == "stop":
-			message = "Sure, let me just terminate myself real quick.  I don't mind.  Really.  There's no coming back from this..."
+		if telegram_command == "die":
+			message = "Sure, let me just terminate myself real quick.  I don't mind.  Really.  It probably won't hurt..."
 			send_telegram_message(message)
 			telegram_command = None
 			break
-		if telegram_command == "hello":
-			message = "Hello!  I am homebot.  Your friendly home automation conductor.  I don't know much yet but I am learning!"
+		if telegram_command == "hello" or telegram_command == "hi":
+			message = "Hello!  I am HomeBot, your friendly home automation conductor."
+			send_telegram_message(message)
+			telegram_command = None
+		if (telegram_command == "help"):
+			message = "Help is on the way!  I know these commands:  status | die | hello | hi | time | help"
 			send_telegram_message(message)
 			telegram_command = None
 		if telegram_command != None:
-			message = "I do not understand you, sorry!  Type 'help' to learn my language baby."
+			message = "I do not understand this command!  Type 'help' for a list of commands."
 			send_telegram_message(message)
 			telegram_command = None
 
-	log("shutting down.")
+	exitMessage = "shutting down."
+	send_telegram_message(exitMessage)
+	log(exitMessage)
 
 if __name__ == "__main__":
 	main()
