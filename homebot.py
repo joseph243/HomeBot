@@ -16,13 +16,19 @@ devices: list[Device] = []
 def sendNetworkMessageToDevice(key, host, message):
 	log("sending a message to " + host)
 	PORT = 55556
-	class MessageManager(BaseManager):
-		pass
-	MessageManager.register("homebotSays")
-	manager = MessageManager(address=(host, PORT), authkey=key)
-	manager.connect()
-	with manager:
+	manager = None
+	try:
+		class MessageManager(BaseManager):
+			pass
+		MessageManager.register("homebotSays")
+		manager = MessageManager(address=(host, PORT), authkey=key)
+		manager.connect()
 		manager.homebotSays().put(message)
+	except Exception as e:
+		log(f"ERROR when sending to device: {e}")
+	finally:
+		#terminate connection#
+		manager = None
 
 def initializeMessageReceive(key) -> queue.Queue:
 	LISTEN_TO_HOST = '0.0.0.0'
