@@ -31,7 +31,7 @@ def initializeMessageReceive(key) -> queue.Queue:
 	messages = queue.Queue()
 	class MessageManager(BaseManager):
 		pass
-	MessageManager.register('incoming', callable=lambda: messages)
+	MessageManager.register('homebot', callable=lambda: messages)
 	manager = MessageManager(address=(LISTEN_TO_HOST,PORT), authkey=key)
 	server = manager.get_server()
 	thread = threading.Thread(target = server.serve_forever, daemon=True)
