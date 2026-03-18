@@ -13,7 +13,7 @@ class MessageManager(BaseManager):
 
 devices: list[Device] = []
 
-def initializeMessageSend(key, host) -> queue.Queue:
+def initializeMessageSend(key, host) -> MessageManager:
 	log("initialize network message send")
 	PORT = 55556
 	class MessageManager(BaseManager):
@@ -21,7 +21,7 @@ def initializeMessageSend(key, host) -> queue.Queue:
 	MessageManager.register("homebotSays")
 	manager = MessageManager(address=(host, PORT), authkey=key)
 	manager.connect()
-	return manager.homebotSays()
+	return manager
 
 def initializeMessageReceive(key) -> queue.Queue:
 	LISTEN_TO_HOST = '0.0.0.0'
@@ -236,7 +236,7 @@ def main():
 			checkHeartbeat()
 			next_device_check = now + configCheckEverySeconds
 
-		##monitor telegram/user comms:
+		##BEGIN USER COMMANDS##
 		if telegram_command == None:
 			continue
 		if telegram_command == "time":
@@ -263,12 +263,13 @@ def main():
 		if telegram_command == "test":
 			message = "Test Command Received, Starting Test."
 			send_telegram_message(message)
-			testDeviceMessageQueue = initializeMessageSend(NETWORKAUTH, '10.0.0.64')
-			testDeviceMessageQueue.put("TEST")
+			testDeviceMessageManager = initializeMessageSend(NETWORKAUTH, '10.0.0.64')
+			testDeviceMessageManager.homebotSays().put("TEST")
+			testDeviceMessageManager.shutdown()
 			telegram_command = None
 		##END COMMANDS##
 		if telegram_command != None:
-			message = "I do not understand this command!  Type 'help' for a list of commands."
+			message = "I do not understand this command: " + telegram_command + ". Type 'help' for a list of commands."
 			send_telegram_message(message)
 			telegram_command = None
 
