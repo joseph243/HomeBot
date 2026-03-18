@@ -267,10 +267,10 @@ def main():
 			message = "Help is on the way!  I know these commands:  status | die | hello | hi | time | help"
 			send_telegram_message(message)
 			telegram_command = None
-		if telegram_command == "test":
-			message = "Test Command Received, Starting Test."
+		if telegram_command == "start bedroom camera":
+			message = "Starting Bedroom Camera."
 			send_telegram_message(message)
-			sendNetworkMessageToDevice(NETWORKAUTH, '10.0.0.64', "TEST")
+			sendNetworkMessageToDevice(NETWORKAUTH, '10.0.0.64', "start")
 			telegram_command = None
 		##END COMMANDS##
 		if telegram_command != None:
