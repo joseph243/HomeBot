@@ -270,7 +270,7 @@ def main():
 		if telegram_command == "start bedroom camera":
 			message = "Starting Bedroom Camera."
 			send_telegram_message(message)
-			sendNetworkMessageToDevice(NETWORKAUTH, '10.0.0.64', "start")
+			sendNetworkMessageToDevice(NETWORKAUTH, '10.0.0.235', "start")
 			telegram_command = None
 		##END COMMANDS##
 		if telegram_command != None:
