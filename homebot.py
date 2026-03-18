@@ -13,16 +13,15 @@ class MessageManager(BaseManager):
 
 devices: list[Device] = []
 
-def initializeMessageSend(key) -> queue.Queue:
+def initializeMessageSend(key, host) -> queue.Queue:
 	log("initialize network message send")
 	PORT = 55556
-	HOST = '10.0.0.235'
 	class MessageManager(BaseManager):
 		pass
-	MessageManager.register('outgoing')
-	manager = MessageManager(address=(HOST, PORT), authkey=key)
+	MessageManager.register("homebotSays")
+	manager = MessageManager(address=(host, PORT), authkey=key)
 	manager.connect()
-	return manager.outgoing()
+	return manager.homebotSays()
 
 def initializeMessageReceive(key) -> queue.Queue:
 	LISTEN_TO_HOST = '0.0.0.0'
@@ -215,9 +214,8 @@ def main():
 	)
 	t.start()
 
-	print("starting network communications")
+	print("starting network listener thread.")
 	incomingNetworkComms = initializeMessageReceive(NETWORKAUTH)
-	outgoingNetworkComms = initializeMessageSend(NETWORKAUTH)
 
 	next_device_check = time.time() + configCheckEverySeconds
 
@@ -239,14 +237,14 @@ def main():
 			next_device_check = now + configCheckEverySeconds
 
 		##monitor telegram/user comms:
-		if (telegram_command == None):
+		if telegram_command == None:
 			continue
-		if (telegram_command == "time"):
+		if telegram_command == "time":
 			message = "The current time is " + datetime.now().strftime("%I:%M") + ". Brain the size of a planet, and they treat me like a sundial."
 			send_telegram_message(message)
-			telegram_command = None	
+			telegram_command = None
 		if telegram_command == "status":
-			message = generateStatusMessage() 
+			message = generateStatusMessage()
 			send_telegram_message(message)
 			telegram_command = None
 		if telegram_command == "die":
@@ -258,10 +256,17 @@ def main():
 			message = "Hello!  I am HomeBot, your friendly home automation conductor."
 			send_telegram_message(message)
 			telegram_command = None
-		if (telegram_command == "help"):
+		if telegram_command == "help":
 			message = "Help is on the way!  I know these commands:  status | die | hello | hi | time | help"
 			send_telegram_message(message)
 			telegram_command = None
+		if telegram_command == "test":
+			message = "Test Command Received, Starting Test."
+			send_telegram_message(message)
+			testDeviceMessageQueue = initializeMessageSend(NETWORKAUTH, '10.0.0.64')
+			testDeviceMessageQueue.put("TEST")
+			telegram_command = None
+		##END COMMANDS##
 		if telegram_command != None:
 			message = "I do not understand this command!  Type 'help' for a list of commands."
 			send_telegram_message(message)
