@@ -14,7 +14,7 @@ class MessageManager(BaseManager):
 devices: list[Device] = []
 
 def sendNetworkMessageToDevice(key, host, message):
-	log("sending a message to " + host)
+	log("sending network communication to " + host)
 	PORT = 55556
 	manager = None
 	try:
@@ -25,7 +25,7 @@ def sendNetworkMessageToDevice(key, host, message):
 		manager.connect()
 		manager.homebotSays().put(message)
 	except Exception as e:
-		log(f"ERROR when sending to device: {e}")
+		log(f"ERROR communicating to device: {e}")
 	finally:
 		#terminate connection#
 		manager = None
