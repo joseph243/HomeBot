@@ -19,8 +19,9 @@ def sendNetworkMessageToDevice(key, host, message):
 	class MessageManager(BaseManager):
 		pass
 	MessageManager.register("homebotSays")
-	with MessageManager(address=(host, PORT), authkey=key) as manager:
-		manager.connect()
+	manager = MessageManager(address=(host, PORT), authkey=key)
+	manager.connect()
+	with manager:
 		manager.homebotSays().put(message)
 
 def initializeMessageReceive(key) -> queue.Queue:
