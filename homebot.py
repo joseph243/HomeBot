@@ -15,7 +15,6 @@ devices: list[Device] = []
 
 def initializeMessageSend(key) -> queue.Queue:
 	log("initialize network message send")
-	AUTH = read_secrets(secrets_local_file)["homebotqueuetoken"]
 	PORT = 55556
 	HOST = '10.0.0.235'
 	class MessageManager(BaseManager):
@@ -28,7 +27,6 @@ def initializeMessageSend(key) -> queue.Queue:
 def initializeMessageReceive(key) -> queue.Queue:
 	LISTEN_TO_HOST = '0.0.0.0'
 	PORT = 55555
-	AUTH = read_secrets(secrets_local_file)["homebotqueuetoken"]
 	log("initialize network message receive")
 	messages = queue.Queue()
 	class MessageManager(BaseManager):
@@ -236,7 +234,7 @@ def main():
 		##update device statuses:
 		now = time.time()
 		if (now >= next_device_check):
-			print("status check..")
+			log("status check..")
 			checkHeartbeat()
 			next_device_check = now + configCheckEverySeconds
 
