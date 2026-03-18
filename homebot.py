@@ -13,15 +13,15 @@ class MessageManager(BaseManager):
 
 devices: list[Device] = []
 
-def initializeMessageSend(key, host) -> MessageManager:
-	log("initialize network message send")
+def sendNetworkMessageToDevice(key, host, message):
+	log("sending a message to " + host)
 	PORT = 55556
 	class MessageManager(BaseManager):
 		pass
 	MessageManager.register("homebotSays")
-	manager = MessageManager(address=(host, PORT), authkey=key)
-	manager.connect()
-	return manager
+	with MessageManager(address=(host, PORT), authkey=key) as manager:
+		manager.connect()
+		manager.homebotSays().put(message)
 
 def initializeMessageReceive(key) -> queue.Queue:
 	LISTEN_TO_HOST = '0.0.0.0'
@@ -263,9 +263,7 @@ def main():
 		if telegram_command == "test":
 			message = "Test Command Received, Starting Test."
 			send_telegram_message(message)
-			testDeviceMessageManager = initializeMessageSend(NETWORKAUTH, '10.0.0.64')
-			testDeviceMessageManager.homebotSays().put("TEST")
-			testDeviceMessageManager.shutdown()
+			sendNetworkMessageToDevice(NETWORKAUTH, '10.0.0.64', "TEST")
 			telegram_command = None
 		##END COMMANDS##
 		if telegram_command != None:
