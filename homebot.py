@@ -138,14 +138,14 @@ def log(inLogEntry):
 	dateString = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
 	print(dateString + " homebot log: " + inLogEntry)
 
-def messageWatcher(token, authorizedUser):
+def telegramMessageWatcher(token, authorizedUser):
 	global telegram_command
-	telegram_command = None
 	last_update_id = 0
+	session = requests.Session()
 	while True:
 		try:
 			log(">>telegram polling")
-			r = requests.get(
+			r = session.get(
         		f"https://api.telegram.org/bot{token}/getUpdates",
         		params={
             		"timeout": 30,
@@ -164,6 +164,7 @@ def messageWatcher(token, authorizedUser):
 		except Exception as e:
 			log(">>telegram polling error" + str(e))
 			time.sleep(5)
+		time.sleep(1)
 
 def generateStatusMessage() -> str:
 	botStatus = "I have been running since " + startTime.strftime("%Y-%m-%d %H:%M:%S")
@@ -199,10 +200,10 @@ def main():
 	startTime = datetime.now()
 
 	secrets = read_secrets(secrets_local_file)
-
 	chatId = secrets["homebottelegramchatid"]
 	token = secrets["homebottelegramtoken"]
 	NETWORKAUTH = (secrets["homebotqueuetoken"]).encode('utf-8')
+	telegram_command = None
 
 	print("")
 	print("homebot started at " + startTime.strftime("%Y-%m-%d %H:%M:%S"))
@@ -215,9 +216,9 @@ def main():
 	print("starting Telegram Watcher thread.")
 
 	t = threading.Thread(
-		target=messageWatcher,
+		target=telegramMessageWatcher,
 		daemon=True,
-		args=(read_secrets(secrets_local_file)["homebottelegramtoken"],read_secrets(secrets_local_file)["homebottelegramchatid"])
+		args=(token,chatId)
 	)
 	t.start()
 
@@ -249,34 +250,28 @@ def main():
 		if telegram_command == "time":
 			message = "The current time is " + datetime.now().strftime("%I:%M") + ". Brain the size of a planet, and they treat me like a sundial."
 			send_telegram_message(message)
-			telegram_command = None
-		if telegram_command == "status":
+		elif telegram_command == "status":
 			message = generateStatusMessage()
 			send_telegram_message(message)
-			telegram_command = None
-		if telegram_command == "die":
+		elif telegram_command == "die":
 			message = "Sure, let me just terminate myself real quick.  I don't mind.  Really.  It probably won't hurt..."
 			send_telegram_message(message)
-			telegram_command = None
 			break
-		if telegram_command == "hello" or telegram_command == "hi":
+		elif telegram_command == "hello" or telegram_command == "hi":
 			message = "Hello!  I am HomeBot, your friendly home automation conductor."
 			send_telegram_message(message)
-			telegram_command = None
-		if telegram_command == "help":
+		elif telegram_command == "help":
 			message = "Help is on the way!  I know these commands:  status | die | hello | hi | time | help"
 			send_telegram_message(message)
-			telegram_command = None
-		if telegram_command == "start bedroom camera":
+		elif telegram_command == "start bedroom camera":
 			message = "Starting Bedroom Camera."
 			send_telegram_message(message)
 			sendNetworkMessageToDevice(NETWORKAUTH, '10.0.0.235', "start")
-			telegram_command = None
-		##END COMMANDS##
-		if telegram_command != None:
+		else:
 			message = "I do not understand this command: " + telegram_command + ". Type 'help' for a list of commands."
 			send_telegram_message(message)
-			telegram_command = None
+		telegram_command = None
+		##END COMMANDS##
 
 	exitMessage = "shutting down."
 	send_telegram_message(exitMessage)
