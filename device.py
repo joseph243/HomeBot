@@ -14,4 +14,4 @@ class Device:
     def __str__(self) -> str:
         status = "ONLINE" if self.online else "OFFLINE"
         last_seen = self.last_contact.strftime("%m-%d %l:%M")
-        return f"{self.name} | {self.device_type.value} | {status} | Last contact: {last_seen}"
+        return f"{self.name} | {self.device_type.value} | {status}"
